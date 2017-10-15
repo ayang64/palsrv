@@ -61,7 +61,7 @@ func (c *Challenger) HandleChallenge(conn net.Conn) {
 		log.Printf(">> %d challenges left.", c.ChallengeLimit-i)
 		log.Printf(">> %v\n", c.Expecting)
 		if err := c.ReceiveResponse(conn); err != nil {
-			fmt.Fprintf(conn, "ERROR: BAD RESPONSE!\n")
+			fmt.Fprintf(conn, "!!! ERROR: %s\n", err)
 			conn.Close()
 			return
 		}
@@ -113,18 +113,31 @@ func (c *Challenger) ReceiveResponse(r io.Reader) error {
 	scanner := bufio.NewScanner(r)
 	scanner.Split(bufio.ScanWords)
 
-	for len(c.Expecting) > 0 {
-		if scanner.Scan() == false {
-			break
-		}
+	complete := make(chan error)
 
-		if scanner.Text() != c.Expecting[0] {
-			log.Printf("bad response!\n")
-			return fmt.Errorf("bad response")
-		}
+	go func() {
+		for len(c.Expecting) > 0 {
+			if scanner.Scan() == false {
+				break
+			}
 
-		log.Printf("good response!\n")
-		c.Expecting = c.Expecting[1:]
+			if scanner.Text() != c.Expecting[0] {
+				log.Printf("bad response!\n")
+				complete <- fmt.Errorf("EXPECTED %s", strings.Join(c.Expecting, " "))
+			}
+
+			log.Printf("good response!\n")
+			c.Expecting = c.Expecting[1:]
+		}
+		complete <- nil
+	}()
+
+	select {
+	case err := <-complete:
+		return err
+
+	case <-time.After(500 * time.Millisecond):
+		return fmt.Errorf("TIME OUT")
 	}
 
 	return nil

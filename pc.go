@@ -37,7 +37,7 @@ func (c *Challenger) HandleChallenge(conn net.Conn) {
 	conn.Close()
 }
 
-func IsPalindrome(s string) bool {
+func isPalindrome(s string) bool {
 	for i, r := 0, []rune(s); i < len(r)/2; i++ {
 		if r[i] != r[len(r)-i-1] {
 			return false
@@ -46,7 +46,7 @@ func IsPalindrome(s string) bool {
 	return true
 }
 
-func RandPalindrome(min, max int) (rc string) {
+func (c *Challenger) RandPalindrome(min, max int) (rc string) {
 	s := rand.Intn(max-min) + min
 	r := make([]rune, s)
 
@@ -58,14 +58,16 @@ func RandPalindrome(min, max int) (rc string) {
 	return string(r)
 }
 
-func RandomWord(min, max int) (rc string) {
+// Generate a random 'word' and avoid picking an accidental
+// palindrome.
+func (c *Challenger) RandWord(min, max int) (rc string) {
 	for {
 		rc = ""
 		for i, max := 0, rand.Intn(max-min)+min; i < max; i++ {
 			rc += string('a' + rand.Intn(26))
 		}
 		// we don't want to accidentally generate a palindrome
-		if IsPalindrome(rc) == false {
+		if isPalindrome(rc) == false {
 			break
 		}
 	}
@@ -115,7 +117,6 @@ func (c *Challenger) SetChallenge() {
 	// nwords := rand.Intn(c.MaxWords-c.MinWords) + c.MinWords
 
 	// generate random words and palindromes
-
 	am := AirMix{Min: 10, Max: 30}
 	am.Init()
 
@@ -132,9 +133,9 @@ func (c *Challenger) SetChallenge() {
 
 		word := func() string {
 			if v < p+am.Min {
-				return RandPalindrome(10, 20)
+				return c.RandPalindrome(10, 20)
 			}
-			return RandomWord(10, 20)
+			return c.RandWord(10, 20)
 		}()
 
 		c.Words = append(c.Words, word)

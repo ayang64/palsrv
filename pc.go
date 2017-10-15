@@ -11,38 +11,6 @@ import (
 	"time"
 )
 
-type AirMix struct {
-	Min  int
-	Max  int
-	Ball []int
-}
-
-func (a *AirMix) Init() error {
-	if a.Min >= a.Max {
-		return fmt.Errorf("min must be greater than max")
-	}
-
-	// create balls
-	a.Ball = make([]int, 0, a.Max-a.Min)
-
-	for i := a.Min; i < a.Max; i++ {
-		a.Ball = append(a.Ball, i)
-	}
-	return nil
-}
-
-func (a *AirMix) Pick() (int, error) {
-	if len(a.Ball) == 0 {
-		return 0, fmt.Errorf("out of balls")
-	}
-
-	i := rand.Intn(len(a.Ball))
-	rc := a.Ball[i]
-	a.Ball = append(a.Ball[0:i], a.Ball[i+1:]...)
-
-	return rc, nil
-}
-
 type Challenger struct {
 	MinWords       int
 	MaxWords       int
@@ -59,9 +27,8 @@ func (c *Challenger) HandleChallenge(conn net.Conn) {
 		c.SetChallenge()
 		c.IssueChallenge(conn)
 		log.Printf(">> %d challenges left.", c.ChallengeLimit-i)
-		log.Printf(">> %v\n", c.Expecting)
 		if err := c.ReceiveResponse(conn); err != nil {
-			fmt.Fprintf(conn, "!!! ERROR: %s\n", err)
+			fmt.Fprintf(conn, "!!! error: %s\n", err)
 			conn.Close()
 			return
 		}
@@ -118,29 +85,29 @@ func (c *Challenger) ReceiveResponse(r io.Reader) error {
 	go func() {
 		for len(c.Expecting) > 0 {
 			if scanner.Scan() == false {
-				break
+				complete <- fmt.Errorf("could not parse input.")
+				return
 			}
 
 			if scanner.Text() != c.Expecting[0] {
-				log.Printf("bad response!\n")
-				complete <- fmt.Errorf("EXPECTED %s", strings.Join(c.Expecting, " "))
+				complete <- fmt.Errorf("bad response, expected: %s", strings.Join(c.Expecting, " "))
+				return
 			}
-
-			log.Printf("good response!\n")
 			c.Expecting = c.Expecting[1:]
 		}
 		complete <- nil
 	}()
 
-	select {
-	case err := <-complete:
-		return err
+	return func() error {
+		select {
+		case err := <-complete:
+			return err
 
-	case <-time.After(500 * time.Millisecond):
-		return fmt.Errorf("TIME OUT")
-	}
+		case <-time.After(250 * time.Millisecond):
+			return fmt.Errorf("time out, expected: %v", strings.Join(c.Expecting, " "))
+		}
+	}()
 
-	return nil
 }
 
 func (c *Challenger) SetChallenge() {
@@ -149,10 +116,10 @@ func (c *Challenger) SetChallenge() {
 
 	// generate random words and palindromes
 
-	am := AirMix{Min: 3, Max: 30}
+	am := AirMix{Min: 10, Max: 30}
 	am.Init()
 
-	p := rand.Intn(am.Min-2) + 2
+	p := rand.Intn(am.Min-5) + 5
 
 	c.Words = []string(nil)
 	c.Expecting = []string(nil)
@@ -165,9 +132,9 @@ func (c *Challenger) SetChallenge() {
 
 		word := func() string {
 			if v < p+am.Min {
-				return RandPalindrome(7, 30)
+				return RandPalindrome(10, 20)
 			}
-			return RandomWord(7, 30)
+			return RandomWord(10, 20)
 		}()
 
 		c.Words = append(c.Words, word)
@@ -179,20 +146,18 @@ func (c *Challenger) SetChallenge() {
 }
 
 func main() {
-	rand.Seed(time.Now().Unix())
-
-	ln, err := net.Listen("tcp", ":12321")
+	listener, err := net.Listen("tcp", ":12321")
 	if err != nil {
 		log.Fatalf("%s\n", err)
 	}
 
 	for {
-		conn, err := ln.Accept()
+		conn, err := listener.Accept()
 		if err != nil {
 			log.Fatalf("error: %s\n", err)
-
 		}
-		c := Challenger{ChallengeLimit: rand.Intn(10000) + 10000, Answer: "ORLANDO GOPHERS IS FUN!"}
+
+		c := Challenger{ChallengeLimit: rand.Intn(50000) + 5000, Answer: "ORLANDO GOPHERS IS FUN!"}
 		go c.HandleChallenge(conn)
 	}
 }

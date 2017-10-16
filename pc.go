@@ -12,21 +12,23 @@ import (
 )
 
 type Challenger struct {
-	MinWords       int
-	MaxWords       int
-	MinPalindromes int
-	MaxPalindromes int
-	ChallengeLimit int
-	Words          []string
-	Expecting      []string
-	Answer         string
+	MinWords         int
+	MaxWords         int
+	MinPalindromes   int
+	MaxPalindromes   int
+	ChallengeLimit   int
+	ChallengeCurrent int
+	Progress         float64
+	Words            []string
+	Expecting        []string
+	Answer           string
 }
 
 func (c *Challenger) HandleChallenge(conn net.Conn) {
-	for i := 0; i < c.ChallengeLimit; i++ {
+	for c.ChallengeCurrent = 0; c.ChallengeCurrent < c.ChallengeLimit; c.ChallengeCurrent++ {
 		c.SetChallenge()
 		c.IssueChallenge(conn)
-		log.Printf(">> %d challenges left.", c.ChallengeLimit-i)
+		log.Printf(">> %d challenges left.", c.ChallengeLimit-c.ChallengeCurrent)
 		if err := c.ReceiveResponse(conn); err != nil {
 			fmt.Fprintf(conn, "!!! error: %s\n", err)
 			conn.Close()
@@ -44,6 +46,24 @@ func isPalindrome(s string) bool {
 		}
 	}
 	return true
+}
+
+func (c *Challenger) RandKoreanPalindrome(min, max int) (rc string) {
+	kchars := []rune{'ㄱ', '기', '역', '기', '윽', 'ㄴ', '니', '은', 'ㄷ', '디',
+		'귿', '디', '읃', 'ㄹ', '리', '을', 'ㅁ', '미', '음', 'ㅂ',
+		'비', '읍', 'ㅅ', '시', '옷', '시', '읏', 'ㅇ', '이', '응',
+		'ㅈ', '지', '읒', 'ㅊ', '치', '읓', 'ㅋ', '키', '읔', 'ㅌ',
+		'티', '읕', 'ㅍ', '피', '읖', 'ㅎ', '히', '읗'}
+
+	s := rand.Intn(max-min) + min
+	r := make([]rune, s)
+	for i := 0; i < s/2+s%2; i++ {
+		idx := rand.Intn(len(kchars))
+		r[i] = rune(kchars[idx])
+		r[len(r)-1-i] = r[i]
+	}
+
+	return string(r)
 }
 
 func (c *Challenger) RandPalindrome(min, max int) (rc string) {
@@ -74,8 +94,38 @@ func (c *Challenger) RandWord(min, max int) (rc string) {
 	return
 }
 
+func randSpace() string {
+	space := []byte{' ', '\t'}
+
+	rc := ""
+
+	for i, max := 0, rand.Intn(5)+1; i < max; i++ {
+		flip := rand.Intn(2)
+		rc += string(space[flip])
+	}
+
+	return rc
+}
+
 func (c *Challenger) IssueChallenge(w io.Writer) {
-	fmt.Fprintf(w, "%s\n", strings.Join(c.Words, " "))
+	// ramp up the probability of noisy spaces to a max of 90%
+	sprob := c.Progress * .90
+
+	output := ""
+	if rand.Float64() < sprob {
+		for idx := range c.Words {
+			output += fmt.Sprintf("%s", c.Words[idx])
+
+			if idx != len(c.Words) {
+				output += fmt.Sprintf("%s", randSpace())
+			}
+		}
+	} else {
+		output += fmt.Sprintf("%s", strings.Join(c.Words, " "))
+	}
+
+	fmt.Printf("SENDING: %s\n", output)
+	fmt.Fprintf(w, "%s\n", output)
 }
 
 func (c *Challenger) ReceiveResponse(r io.Reader) error {
@@ -125,6 +175,10 @@ func (c *Challenger) SetChallenge() {
 	c.Words = []string(nil)
 	c.Expecting = []string(nil)
 
+	c.Progress = float64(c.ChallengeCurrent) / float64(c.ChallengeLimit)
+
+	fmt.Printf("Progress: %f\n", c.Progress)
+
 	for {
 		v, err := am.Pick()
 		if err != nil {
@@ -133,7 +187,16 @@ func (c *Challenger) SetChallenge() {
 
 		word := func() string {
 			if v < p+am.Min {
-				return c.RandPalindrome(10, 20)
+				return func() string {
+					// as we near the end of the run, we want to increase the probability
+					// of outputting korean to a max of 40%.
+					kprob := c.Progress * .40
+
+					if rand.Float64() < kprob {
+						return c.RandKoreanPalindrome(10, 20)
+					}
+					return c.RandPalindrome(10, 20)
+				}()
 			}
 			return c.RandWord(10, 20)
 		}()
@@ -158,7 +221,7 @@ func main() {
 			log.Fatalf("error: %s\n", err)
 		}
 
-		c := Challenger{ChallengeLimit: rand.Intn(50000) + 5000, Answer: "ORLANDO GOPHERS IS FUN!"}
+		c := Challenger{ChallengeLimit: rand.Intn(5000) + 500, Answer: "ORLANDO GOPHERS IS FUN!"}
 		go c.HandleChallenge(conn)
 	}
 }

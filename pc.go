@@ -49,11 +49,13 @@ func isPalindrome(s string) bool {
 }
 
 func (c *Challenger) RandKoreanPalindrome(min, max int) (rc string) {
-	kchars := []rune{'ㄱ', '기', '역', '기', '윽', 'ㄴ', '니', '은', 'ㄷ', '디',
+	kchars := []rune{
+		'ㄱ', '기', '역', '기', '윽', 'ㄴ', '니', '은', 'ㄷ', '디',
 		'귿', '디', '읃', 'ㄹ', '리', '을', 'ㅁ', '미', '음', 'ㅂ',
 		'비', '읍', 'ㅅ', '시', '옷', '시', '읏', 'ㅇ', '이', '응',
 		'ㅈ', '지', '읒', 'ㅊ', '치', '읓', 'ㅋ', '키', '읔', 'ㅌ',
-		'티', '읕', 'ㅍ', '피', '읖', 'ㅎ', '히', '읗'}
+		'티', '읕', 'ㅍ', '피', '읖', 'ㅎ', '히', '읗',
+	}
 
 	s := rand.Intn(max-min) + min
 	r := make([]rune, s)
@@ -221,7 +223,7 @@ func main() {
 			log.Fatalf("error: %s\n", err)
 		}
 
-		c := Challenger{ChallengeLimit: rand.Intn(5000) + 500, Answer: "ORLANDO GOPHERS IS FUN!"}
+		c := Challenger{ChallengeLimit: rand.Intn(5000) + 500, Answer: "A Man, A Plan, A Canal-Panama!"}
 		go c.HandleChallenge(conn)
 	}
 }
